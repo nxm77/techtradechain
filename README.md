@@ -8,7 +8,7 @@
 
 techtradechain-cryptogen 从 chainmaker-cryptogen v2.3.5 修改
 
-techtradechain-go 从 techtradechain-go v2.3.7 修改
+techtradechain-go 从 chainmaker-go v2.3.7 修改
 
 
 
