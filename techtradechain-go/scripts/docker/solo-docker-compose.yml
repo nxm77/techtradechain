@@ -1,0 +1,26 @@
+version: '3'
+
+services:
+  node1:
+    container_name: cm-solo
+    image: "techtradechainofficial/techtradechain:v2.3.7"
+    restart: always
+    working_dir: "/techtradechain-go/bin"
+    command: "./techtradechain start -c ../config/wx-org1.techtradechain.com/techtradechain.yml >> panic.log"
+    ports:
+      - "11301:11301"
+      - "12301:12301"
+    volumes:
+      - ./config/solo/wx-org1.techtradechain.com:/techtradechain-go/config/wx-org1.techtradechain.com
+      - ./tmp_solo/data:/techtradechain-go/data
+      - ./tmp_solo/log:/techtradechain-go/log
+    networks:
+      cm:
+        ipv4_address: 172.33.2.2
+
+networks:
+  cm:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.33.2.0/24

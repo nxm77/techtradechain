@@ -1,0 +1,34 @@
+/*
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+package pb;
+
+// Chain table structure
+message CuckooFilter {
+  // The field "cuckoo" is used to hold the serialized data of the cuckoo
+  // Pb limit: The size of bytes cannot be larger than 4 GB
+  bytes cuckoo = 1;
+  // Carries the ID of the time
+  bytes extension = 2;
+  // cuckoo configuration
+  bytes config = 3;
+  // cuckoo configuration
+  bool full = 4;
+}
+
+// Bird's Nest
+message BirdsNest {
+  // Bird's Nest config
+  bytes config = 1;
+  // The final height
+  uint64 height = 2;
+  // current index
+  uint32 currentIndex = 3;
+  // A group of cuckoos filter
+  repeated CuckooFilter filters = 4;
+}

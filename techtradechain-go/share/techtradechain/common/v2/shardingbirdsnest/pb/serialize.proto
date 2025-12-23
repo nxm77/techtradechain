@@ -1,0 +1,18 @@
+/*
+Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+syntax = "proto3";
+
+package pb;
+
+// Sharding Bird's Nest
+message ShardingBirdsNest {
+  uint32 length = 1;
+  // The final height
+  uint64 height = 2;
+  // Bird's Nest config
+  bytes config = 3;
+}

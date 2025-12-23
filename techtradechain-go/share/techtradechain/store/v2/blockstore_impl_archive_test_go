@@ -1,0 +1,1169 @@
+/*
+ * Copyright (C) THL A29 Limited, a Tencent company. All rights reserved.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ */
+
+package store
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"techtradechain.com/techtradechain/common/v2/crypto/hash"
+	commonPb "techtradechain.com/techtradechain/pb-go/v2/common"
+	storePb "techtradechain.com/techtradechain/pb-go/v2/store"
+	"techtradechain.com/techtradechain/protocol/v2"
+	"techtradechain.com/techtradechain/protocol/v2/test"
+	"techtradechain.com/techtradechain/store/v2/serialization"
+	tbf "techtradechain.com/techtradechain/store/v2/types/blockfile"
+	"techtradechain.com/techtradechain/utils/v2"
+	"github.com/stretchr/testify/assert"
+)
+
+func Test_blockchainStoreImpl_Mysql_Archive(t *testing.T) {
+	//var factory = getFactory()
+	//s, err := factory.NewStore(chainId, getSqliteConfig(), &test.GoLogger{}, nil)
+	//assert.Equal(t, nil, err)
+	//defer func(s protocol.BlockchainStore) {
+	//
+	//	s.Close()
+	//}(s)
+	//
+	//err = s.ArchiveBlock(0)
+	//assert.Equal(t, nil, err)
+	//
+	//err = s.RestoreBlocks(nil)
+	//assert.Equal(t, nil, err)
+	//
+	//archivedPivot := s.GetArchivedPivot()
+	//assert.True(t, archivedPivot == 0)
+}
+
+func Test_blockchainStoreImpl_Archive(t *testing.T) {
+	//var factory = getFactory()
+	//dbConf := getlvldbConfig("")
+	//dbConf.UnArchiveBlockHeight = 10
+	//s, err := factory.NewStore(chainId, dbConf, log, nil)
+	//assert.Equal(t, nil, err)
+	//defer func(s protocol.BlockchainStore) {
+	//
+	//	s.Close()
+	//}(s)
+	//
+	//totalHeight := 60
+	//archiveHeight1 := 27
+	//archiveHeight2 := 30
+	//archiveHeight3 := 43
+	//
+	////Prepare block data
+	//blocks := make([]*commonPb.Block, 0, totalHeight)
+	//txRWSetMp := make(map[uint64][]*commonPb.TxRWSet)
+	//for i := 0; i < totalHeight; i++ {
+	//	var (
+	//		block   *commonPb.Block
+	//		txRWSet []*commonPb.TxRWSet
+	//	)
+	//
+	//	if i%5 == 0 {
+	//		block, txRWSet = createConfBlockAndRWSets(chainId, uint64(i))
+	//	} else {
+	//		block, txRWSet = createBlockAndRWSets(chainId, uint64(i), 10)
+	//	}
+	//
+	//	err = s.PutBlock(block, txRWSet)
+	//	assert.Equal(t, nil, err)
+	//	blocks = append(blocks, block)
+	//	txRWSetMp[block.Header.BlockHeight] = txRWSet
+	//}
+	//
+	//verifyArchive(t, 0, blocks, s)
+	//
+	////archive block height1
+	//err = s.ArchiveBlock(uint64(archiveHeight1))
+	//assert.Equal(t, nil, err)
+	//assert.Equal(t, uint64(archiveHeight1), s.GetArchivedPivot())
+	//
+	//verifyArchive(t, 10, blocks, s)
+	//
+	////archive block height2 which is a config block
+	//err1 := s.ArchiveBlock(uint64(archiveHeight2))
+	//assert.True(t, err1 == tbf.ErrConfigBlockArchive)
+	//assert.Equal(t, uint64(archiveHeight1), s.GetArchivedPivot())
+	//
+	//verifyArchive(t, 15, blocks, s)
+	//
+	////archive block height3
+	//err = s.ArchiveBlock(uint64(archiveHeight3))
+	//assert.Equal(t, nil, err)
+	//assert.Equal(t, uint64(archiveHeight3), s.GetArchivedPivot())
+	//
+	//verifyArchive(t, 25, blocks, s)
+	//
+	////Prepare restore data
+	//blocksBytes := make([][]byte, 0, archiveHeight3-archiveHeight2+1)
+	//for i := archiveHeight2; i <= archiveHeight3; i++ {
+	//	blockBytes, _, err5 := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+	//		Block:          blocks[i],
+	//		TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+	//		ContractEvents: nil,
+	//	})
+	//
+	//	assert.Equal(t, nil, err5)
+	//	blocksBytes = append(blocksBytes, blockBytes)
+	//}
+	//
+	////restore block
+	//err = s.RestoreBlocks(blocksBytes)
+	//assert.Equal(t, nil, err)
+	//assert.Equal(t, uint64(archiveHeight2-1), s.GetArchivedPivot())
+	//
+	//verifyArchive(t, 10, blocks, s)
+	//
+	////wait kvdb compactrange
+	//time.Sleep(5 * time.Second)
+}
+
+func buildAllConfigBlockArchiveDB(totalHeight int, bs protocol.BlockchainStore) ([]*commonPb.Block,
+	map[uint64][]*commonPb.TxRWSet, error) {
+	var err error
+	blocks := make([]*commonPb.Block, 0, totalHeight)
+	txRWSetMp := make(map[uint64][]*commonPb.TxRWSet)
+	for i := 0; i < totalHeight; i++ {
+		var (
+			block   *commonPb.Block
+			txRWSet []*commonPb.TxRWSet
+		)
+
+		block, txRWSet = createConfBlockAndRWSets(chainId, uint64(i))
+		if i == 0 {
+			block.Header.PreConfHeight = 0
+		} else {
+			block.Header.PreConfHeight = uint64(i - 1)
+		}
+		block.Header.TxRoot, _ = calcTxRoot(block)
+		block.Header.RwSetRoot, _ = calcRwSetsRoot(txRWSet)
+		block.Header.DagHash, _ = calcDagHash(block)
+		block.Header.BlockHash, _ = utils.CalcBlockHash(chainConf.Crypto.Hash, block)
+		err = bs.PutBlock(block, txRWSet)
+		blocks = append(blocks, block)
+		txRWSetMp[block.Header.BlockHeight] = txRWSet
+	}
+
+	return blocks, txRWSetMp, err
+}
+
+func buildArchiveDB(totalHeight, txNum int, confBlocks []uint64, bs protocol.BlockchainStore) ([]*commonPb.Block,
+	map[uint64][]*commonPb.TxRWSet, error) {
+	var err error
+	ci := 0
+	isConf := false
+	preConfHeight := confBlocks[0]
+
+	blocks := make([]*commonPb.Block, 0, totalHeight)
+	txRWSetMp := make(map[uint64][]*commonPb.TxRWSet)
+	for i := 0; i < totalHeight; i++ {
+		var (
+			block   *commonPb.Block
+			txRWSet []*commonPb.TxRWSet
+		)
+
+		for j := ci; j < len(confBlocks); j++ {
+			if confBlocks[j] == uint64(i) {
+				isConf = true
+				ci = j + 1
+				break
+			}
+		}
+
+		if ci > 1 && confBlocks[ci-1] < uint64(i) {
+			preConfHeight = confBlocks[ci-1]
+		}
+
+		if isConf {
+			block, txRWSet = createConfBlockAndRWSets(chainId, uint64(i))
+			isConf = false
+		} else {
+			block, txRWSet = createBlockAndRWSets(chainId, uint64(i), txNum)
+		}
+
+		block.Header.PreConfHeight = preConfHeight
+		block.Header.TxRoot, _ = calcTxRoot(block)
+		block.Header.RwSetRoot, _ = calcRwSetsRoot(txRWSet)
+		block.Header.DagHash, _ = calcDagHash(block)
+		block.Header.BlockHash, _ = utils.CalcBlockHash(chainConf.Crypto.Hash, block)
+		err = bs.PutBlock(block, txRWSet)
+		if err != nil {
+			return nil, nil, err
+		}
+		blocks = append(blocks, block)
+		txRWSetMp[block.Header.BlockHeight] = txRWSet
+	}
+
+	return blocks, txRWSetMp, err
+}
+
+func calcTxRoot(blk *commonPb.Block) ([]byte, error) {
+	txHashes := make([][]byte, 0, len(blk.Txs))
+	bv := int(blk.Header.BlockVersion)
+	for _, tx := range blk.Txs {
+		txHash, err := utils.CalcTxHashWithVersion(chainConf.Crypto.Hash, tx, bv)
+		if err != nil {
+			return nil, err
+		}
+		txHashes = append(txHashes, txHash)
+	}
+
+	root, err := hash.GetMerkleRoot(chainConf.Crypto.Hash, txHashes)
+	if err != nil {
+		return nil, err
+	}
+
+	return root, nil
+}
+
+func calcRwSetsRoot(rwSets []*commonPb.TxRWSet) ([]byte, error) {
+	hashes := make([][]byte, 0, len(rwSets))
+	for _, rw := range rwSets {
+		rwSetH, err := utils.CalcRWSetHash(chainConf.Crypto.Hash, rw)
+		if err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, rwSetH)
+	}
+
+	// verify rwSet merkle root
+	root, err := hash.GetMerkleRoot(chainConf.Crypto.Hash, hashes)
+	if err != nil {
+		return nil, err
+	}
+	return root, nil
+}
+
+func calcDagHash(blk *commonPb.Block) ([]byte, error) {
+	// verify dag hash
+	return utils.CalcDagHash(chainConf.Crypto.Hash, blk.Dag)
+}
+
+func Test_blockchainStoreImpl_KVDB_Archive(t *testing.T) {
+	var factory = getFactory()
+	//pathd := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathd := ""
+	dbConf := getlvldbConfig(pathd)
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.DisableBlockFileDb = true
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		_ = s.Close()
+	}(s)
+
+	archiveHeight1 := 27
+	archiveHeight2 := 30
+	archiveHeight3 := 43
+
+	//Prepare block data
+	confBlocks := []uint64{0, 10, 21, 30, 35, 40}
+	blocks, txRWSetMp, errb := buildArchiveDB(60, 10, confBlocks, s)
+	assert.Nil(t, errb)
+
+	verifyArchive(t, 0, true, blocks, s)
+
+	//archive block height1
+	err = s.ArchiveBlock(uint64(archiveHeight1))
+	assert.Nil(t, err)
+	assert.Equal(t, uint64(archiveHeight1), s.GetArchivedPivot())
+	as, erra := s.GetArchiveStatus()
+	assert.Nil(t, erra)
+	assert.Equal(t, uint64(archiveHeight1), as.ArchivePivot)
+
+	verifyArchive(t, 10, true, blocks, s)
+
+	//archive block height2 which is a config block
+	err1 := s.ArchiveBlock(uint64(archiveHeight2))
+	assert.True(t, err1 == tbf.ErrConfigBlockArchive)
+	assert.Equal(t, uint64(archiveHeight1), s.GetArchivedPivot())
+
+	verifyArchive(t, 21, true, blocks, s)
+
+	//archive block height3
+	err = s.ArchiveBlock(uint64(archiveHeight3))
+	assert.Nil(t, err)
+	assert.Equal(t, uint64(archiveHeight3), s.GetArchivedPivot())
+
+	verifyArchive(t, 30, true, blocks, s)
+
+	//Prepare restore data
+	restoreHeight := 0
+	for i := archiveHeight3; i >= restoreHeight; i-- {
+		blockBytes, _, err5 := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+			Block:          blocks[i],
+			TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+			ContractEvents: nil,
+		})
+
+		assert.Nil(t, err5)
+		//restore block
+		assert.Nil(t, s.RestoreBlocks([][]byte{blockBytes}))
+	}
+
+	assert.Equal(t, uint64(restoreHeight), s.GetArchivedPivot())
+	verifyArchive(t, 0, true, blocks, s)
+
+	//wait kvdb compact range
+	//time.Sleep(5 * time.Second)
+}
+
+func TTest_blockchainStoreImpl_BlockFile_Archive_Height(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		_ = s.Close()
+	}(s)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight1 := []uint64{6, 0}
+	archiveHeight2 := []uint64{7, 7}
+	archiveHeight3 := []uint64{8, 7}
+	archiveHeight4 := []uint64{9, 7}
+	archiveHeight5 := []uint64{15, 7}
+	archiveHeight6 := []uint64{23, 23}
+	archiveHeight7 := []uint64{24, 23}
+	archiveHeight8 := []uint64{43, 39}
+
+	archiveWait := time.Second
+
+	//Prepare block data
+	confBlocks := []uint64{0, 10, 15, 30, 35, 40}
+	blocks, _, errb := buildArchiveDB(60, 10000, confBlocks, s)
+	assert.Nil(t, errb)
+	verifyArchive(t, 0, false, blocks, s)
+
+	// archive block height not change
+	err = s.ArchiveBlock(archiveHeight1[0])
+	assert.True(t, strings.Contains(err.Error(), "archive range less than"))
+	assert.Equal(t, archiveHeight1[1], s.GetArchivedPivot())
+
+	// archive block height move to archiveHeight2[1]
+	err = s.ArchiveBlock(archiveHeight2[0])
+	time.Sleep(archiveWait)
+	assert.Nil(t, err)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, archiveHeight2[1], s.GetArchivedPivot())
+
+	// archive block height not change
+	err = s.ArchiveBlock(archiveHeight3[0])
+	assert.True(t, strings.Contains(err.Error(), "archive range less than"))
+	assert.Equal(t, archiveHeight3[1], s.GetArchivedPivot())
+
+	// archive block height not change
+	err = s.ArchiveBlock(archiveHeight4[0])
+	assert.True(t, strings.Contains(err.Error(), "archive range less than"))
+	assert.Equal(t, archiveHeight4[1], s.GetArchivedPivot())
+
+	// archive block height not change, and this is a config block
+	err = s.ArchiveBlock(archiveHeight5[0])
+	assert.True(t, strings.Contains(err.Error(), "archive range less than"))
+	assert.Equal(t, archiveHeight5[1], s.GetArchivedPivot())
+
+	// archive block height move to archiveHeight6[1]
+	err = s.ArchiveBlock(archiveHeight6[0])
+	time.Sleep(archiveWait)
+	assert.Nil(t, err)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, archiveHeight6[1], s.GetArchivedPivot())
+
+	// archive block height not change
+	err = s.ArchiveBlock(archiveHeight7[0])
+	assert.True(t, strings.Contains(err.Error(), "archive range less than"))
+	assert.Equal(t, archiveHeight7[1], s.GetArchivedPivot())
+
+	// archive block height move to archiveHeight8[1]
+	err = s.ArchiveBlock(archiveHeight8[0])
+	assert.Nil(t, err)
+	time.Sleep(archiveWait)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, archiveHeight8[1], s.GetArchivedPivot())
+}
+
+func Test_blockchainStoreImpl_BlockFile_Archive(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		_ = s.Close()
+	}(s)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight1 := []int{10, 7}
+	//archiveHeight2 := []int{26, 23}
+	//archiveHeight3 := []int{43, 39}
+
+	//waitTime := time.Millisecond * 20
+	archiveWait := time.Second
+	//time.Sleep(100 * time.Minute)
+
+	//Prepare block data
+	//var blocks []*commonPb.Block
+	confBlocks := []uint64{0, 10, 20, 30, 35, 40}
+	// 1 9 17 25 33 41 49 56
+	//blocks, txRWSetMp, errb := buildArchiveDB(60, 10000, confBlocks, s)
+	blocks, _, errb := buildArchiveDB(30, 10000, confBlocks, s)
+	assert.Nil(t, errb)
+	verifyArchive(t, confBlocks[0], false, blocks, s)
+
+	// archive block height
+	assert.Nil(t, waitArchiveNormal(s))
+	err = s.ArchiveBlock(uint64(archiveHeight1[0]))
+	assert.Nil(t, err)
+	time.Sleep(archiveWait)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, uint64(archiveHeight1[1]), s.GetArchivedPivot())
+
+	verifyArchive(t, confBlocks[1], false, blocks, s)
+
+	// archive block height2 which is a config block
+	//assert.Nil(t, waitArchiveNormal(s))
+	//err1 := s.ArchiveBlock(uint64(archiveHeight2[0]))
+	//assert.True(t, err1 != tbf.ErrConfigBlockArchive)
+	//time.Sleep(archiveWait)
+	//assert.Nil(t, waitArchiveNormal(s))
+	//assert.Equal(t, uint64(archiveHeight2[1]), s.GetArchivedPivot())
+
+	//verifyArchive(t, confBlocks[2], false, blocks, s)
+
+	// archive block height3
+	//assert.Nil(t, waitArchiveNormal(s))
+	//err = s.ArchiveBlock(uint64(archiveHeight3[0]))
+	//assert.Nil(t, err)
+	//time.Sleep(archiveWait)
+	//assert.Nil(t, waitArchiveNormal(s))
+	//assert.Equal(t, uint64(archiveHeight3[1]), s.GetArchivedPivot())
+	//
+	//verifyArchive(t, confBlocks[3], false, blocks, s)
+
+	//// prepare restore data
+	//blocksBytes := make([][]byte, 0, archiveHeight3[1]-archiveHeight2[1]+1)
+	//for i := archiveHeight2[1]; i <= archiveHeight3[1]; i++ {
+	//	blockBytes, _, err5 := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+	//		Block:          blocks[i],
+	//		TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+	//		ContractEvents: nil,
+	//	})
+	//
+	//	assert.Nil(t, err5)
+	//	blocksBytes = append(blocksBytes, blockBytes)
+	//}
+	//
+	////restore block
+	//assert.Nil(t, waitArchiveNormal(s))
+	//err = s.RestoreBlocks(blocksBytes)
+	//assert.Nil(t, err)
+	//as, erra := s.GetArchiveStatus()
+	//assert.Nil(t, erra)
+	//time.Sleep(time.Duration(dbConf.RestoreInterval) * time.Second)
+	//fileCnt := len(as.FileRanges)
+	//for fileCnt != 0 {
+	//	time.Sleep(waitTime)
+	//	as, err = s.GetArchiveStatus()
+	//	assert.Nil(t, err)
+	//	fileCnt = len(as.FileRanges)
+	//}
+	//assert.Equal(t, uint64(archiveHeight2[1]-1), as.ArchivePivot)
+	//
+	//verifyArchive(t, confBlocks[1], false, blocks, s)
+}
+
+func TTest_blockchainStoreImpl_BlockFile_All_ConfigBlock_Archive(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		s.Close()
+	}(s)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight1 := []int{178823, 7}
+	archiveHeight2 := []int{26, 23}
+	archiveHeight3 := []int{43, 39}
+	waitTime := time.Second * 3
+
+	//Prepare block data
+	//total := 1000000
+	confBlocks := []uint64{0, 10, 20, 30, 35, 40}
+	//blocks, txRWSetMp, errb := buildAllConfigBlockArchiveDB(total, s)
+	//assert.Nil(t, errb)
+	var blocks []*commonPb.Block
+	//verifyArchive(t, confBlocks[0], false, blocks, s)
+
+	// archive block height
+	err = s.ArchiveBlock(uint64(archiveHeight1[0]))
+	assert.Nil(t, err)
+	time.Sleep(10 * time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, uint64(archiveHeight1[1]), s.GetArchivedPivot())
+
+	//verifyArchive(t, confBlocks[1], false, blocks, s)
+
+	// archive block height2 which is a config block
+	err1 := s.ArchiveBlock(uint64(archiveHeight2[1]))
+	assert.True(t, err1 != tbf.ErrConfigBlockArchive)
+	time.Sleep(10 * time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, uint64(archiveHeight2[1]), s.GetArchivedPivot())
+
+	verifyArchive(t, confBlocks[2], false, blocks, s)
+
+	// archive block height3
+	err = s.ArchiveBlock(uint64(archiveHeight3[0]))
+	assert.Nil(t, err)
+	time.Sleep(10 * time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	assert.Equal(t, uint64(archiveHeight3[1]), s.GetArchivedPivot())
+
+	verifyArchive(t, confBlocks[3], false, blocks, s)
+
+	// prepare restore data
+	blocksBytes := make([][]byte, 0, archiveHeight3[1]-archiveHeight2[1]+1)
+	for i := archiveHeight2[1]; i <= archiveHeight3[1]; i++ {
+		blockBytes, _, err5 := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+			Block: blocks[i],
+			//TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+			ContractEvents: nil,
+		})
+
+		assert.Nil(t, err5)
+		blocksBytes = append(blocksBytes, blockBytes)
+	}
+
+	//restore block
+	err = s.RestoreBlocks(blocksBytes)
+	assert.Nil(t, err)
+	as, erra := s.GetArchiveStatus()
+	assert.Nil(t, erra)
+	time.Sleep(time.Duration(dbConf.RestoreInterval) * time.Second)
+	fileCnt := len(as.FileRanges)
+	for fileCnt != 0 {
+		time.Sleep(waitTime)
+		as, err = s.GetArchiveStatus()
+		assert.Nil(t, err)
+		fileCnt = len(as.FileRanges)
+	}
+	assert.Equal(t, uint64(archiveHeight2[1]-1), as.ArchivePivot)
+
+	verifyArchive(t, confBlocks[1], false, blocks, s)
+}
+
+func Test_blockchainStoreImpl_BlockFile_Restore(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		_ = s.Close()
+	}(s)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight := []int{18, 15}
+	restoreHeight := 0
+	waitTime := 20 * time.Millisecond
+
+	//Prepare block data
+	confBlocks := []uint64{0, 10, 20, 30, 35, 40}
+	// 1 9 17 25 ||| 33 41 49 56
+	blocks, txRWSetMp, errb := buildArchiveDB(30, 10000, confBlocks, s)
+	assert.Nil(t, errb)
+	verifyArchive(t, confBlocks[0], false, blocks, s)
+
+	// archive block height
+	err = s.ArchiveBlock(uint64(archiveHeight[0]))
+	assert.Nil(t, err)
+	time.Sleep(time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	as, erra := s.GetArchiveStatus()
+	assert.Nil(t, erra)
+	assert.Equal(t, uint64(archiveHeight[1]), as.ArchivePivot)
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	//verifyArchive(t, confBlocks[1], false, blocks, s)
+
+	// restore to restoreHeight1
+	restoreBlockPart(t, restoreHeight, blocks, txRWSetMp, s, waitTime, confBlocks[1])
+}
+
+func TTest_blockchainStoreImpl_BlockFile_Restore(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		_ = s.Close()
+	}(s)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight := []int{43, 39}
+	restoreHeight1 := 35
+	restoreHeight2 := 25
+	restoreHeight3 := 15
+	waitTime := 20 * time.Millisecond
+
+	//Prepare block data
+	confBlocks := []uint64{0, 10, 20, 30, 35, 40}
+	blocks, txRWSetMp, errb := buildArchiveDB(60, 10000, confBlocks, s)
+	assert.Nil(t, errb)
+	verifyArchive(t, confBlocks[0], false, blocks, s)
+
+	// archive block height
+	err = s.ArchiveBlock(uint64(archiveHeight[0]))
+	assert.Nil(t, err)
+	time.Sleep(time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	as, erra := s.GetArchiveStatus()
+	assert.Nil(t, erra)
+	assert.Equal(t, uint64(archiveHeight[1]), as.ArchivePivot)
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	verifyArchive(t, confBlocks[4], false, blocks, s)
+
+	// restore to restoreHeight3
+	restoreBlockPart(t, restoreHeight1, blocks, txRWSetMp, s, waitTime, confBlocks[3])
+	// restore to restoreHeight2
+	restoreBlockPart(t, restoreHeight2, blocks, txRWSetMp, s, waitTime, confBlocks[2])
+	// restore to restoreHeight1
+	restoreBlockPart(t, restoreHeight3, blocks, txRWSetMp, s, waitTime, confBlocks[1])
+
+	// restore to 0
+	//as, erra = s.GetArchiveStatus()
+	//assert.Nil(t, erra)
+	//blocksBytes := make([][]byte, 0, int(as.ArchivePivot)+1)
+	//for i := 0; i <= int(as.ArchivePivot); i++ {
+	//	blockBytes, _, err5 := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+	//		Block:          blocks[i],
+	//		TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+	//		ContractEvents: nil,
+	//	})
+	//
+	//	assert.Nil(t, err5)
+	//	blocksBytes = append(blocksBytes, blockBytes)
+	//}
+	//
+	////restore block
+	//err = s.RestoreBlocks(blocksBytes)
+	//assert.Nil(t, err)
+	//as, err = s.GetArchiveStatus()
+	//assert.Nil(t, err)
+	//assert.Equal(t, 2, len(as.FileRanges))
+	//time.Sleep(time.Duration(dbConf.RestoreInterval) * time.Second)
+	//fileCnt := len(as.FileRanges)
+	//for fileCnt != 0 {
+	//	time.Sleep(waitTime)
+	//	as, err = s.GetArchiveStatus()
+	//	assert.Nil(t, err)
+	//	fileCnt = len(as.FileRanges)
+	//}
+	//assert.Equal(t, uint64(0), as.ArchivePivot)
+	//assert.Equal(t, 0, len(as.FileRanges))
+	//
+	//verifyArchive(t, confBlocks[0], false, blocks, s)
+}
+
+func Test_blockchainStoreImpl_BlockFile_Restore_Merge(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+	defer func(s protocol.BlockchainStore) {
+		_ = s.Close()
+	}(s)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight := []int{24, 23}
+	//time.Sleep(100 * time.Minute)
+	restoreHeight1 := 9
+	waitTime := time.Millisecond * 20
+
+	//Prepare block data
+	confBlocks := []uint64{0, 10, 20, 30}
+	blocks, txRWSetMp, errb := buildArchiveDB(36, 10000, confBlocks, s)
+	assert.Nil(t, errb)
+	verifyArchive(t, confBlocks[0], false, blocks, s)
+
+	// archive block height
+	assert.Nil(t, s.ArchiveBlock(uint64(archiveHeight[0])))
+	time.Sleep(time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	as, erra := s.GetArchiveStatus()
+	assert.Nil(t, erra)
+	assert.Equal(t, uint64(archiveHeight[1]), as.ArchivePivot)
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	verifyArchive(t, confBlocks[2], false, blocks, s)
+
+	// restore to restoreHeight3
+	//blocksBytes := make([][]byte, 0, int(as.ArchivePivot)-restoreHeight1+1)
+	for i := int(as.ArchivePivot); i >= restoreHeight1; i-- {
+		blocksBytes := make([][]byte, 1)
+		blocksBytes[0], _, err = serialization.SerializeBlock(&storePb.BlockWithRWSet{
+			Block:          blocks[i],
+			TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+			ContractEvents: nil,
+		})
+
+		assert.Nil(t, err)
+		assert.Nil(t, s.RestoreBlocks(blocksBytes))
+	}
+
+	as, err = s.GetArchiveStatus()
+	assert.Nil(t, err)
+	assert.Equal(t, int(as.ArchivePivot)-restoreHeight1+1, len(as.FileRanges))
+	time.Sleep(time.Duration(dbConf.RestoreInterval) * time.Second)
+	fileCnt := len(as.FileRanges)
+	for fileCnt != 0 {
+		time.Sleep(waitTime)
+		as, err = s.GetArchiveStatus()
+		assert.Nil(t, err)
+		fileCnt = len(as.FileRanges)
+	}
+	assert.Equal(t, uint64(restoreHeight1-1), as.ArchivePivot)
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	verifyArchive(t, confBlocks[1], false, blocks, s)
+}
+
+func TTest_blockchainStoreImpl_BlockFile_Restore_Resume(t *testing.T) {
+	var factory = getFactory()
+	//pathD := "/Users/zhouhoufa/Code/src/techtradechain.com/techtradechain/store/data"
+	pathD := ""
+	dbConf := getlvldbConfig(pathD)
+	//dbConf.StorePath = pathD
+	dbConf.UnArchiveBlockHeight = 10
+	dbConf.LogDBSegmentSize = 64
+	dbConf.EnableRWC = false
+	dbConf.ReadBFDBTimeOut = 1000000
+	dbConf.ArchiveCheckInterval = 1
+	dbConf.RestoreInterval = 5
+	s, err := factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+
+	// first is expect archive pivot, second is actual archive pivot
+	archiveHeight := []int{24, 23}
+	restoreHeight1 := 0
+	waitTime := time.Millisecond * 20
+
+	//Prepare block data
+	confBlocks := []uint64{0, 10, 20, 30}
+	blocks, txRWSetMp, errb := buildArchiveDB(36, 10000, confBlocks, s)
+	assert.Nil(t, errb)
+	verifyArchive(t, confBlocks[0], false, blocks, s)
+
+	// archive block height
+	assert.Nil(t, s.ArchiveBlock(uint64(archiveHeight[0])))
+	time.Sleep(time.Second)
+	assert.Nil(t, waitArchiveNormal(s))
+	as, erra := s.GetArchiveStatus()
+	assert.Nil(t, erra)
+	assert.Equal(t, uint64(archiveHeight[1]), as.ArchivePivot)
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	verifyArchive(t, confBlocks[2], false, blocks, s)
+
+	// restore to restoreHeight1
+	damagePoint := []uint64{12, 14, 20}
+	for i := int(as.ArchivePivot); i >= restoreHeight1; i-- {
+		blocksBytes := make([][]byte, 1)
+		blocksBytes[0], _, err = serialization.SerializeBlock(&storePb.BlockWithRWSet{
+			Block:          blocks[i],
+			TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+			ContractEvents: nil,
+		})
+
+		assert.Nil(t, err)
+		assert.Nil(t, s.RestoreBlocks(blocksBytes))
+	}
+
+	// stop store instance
+	_ = s.Close()
+
+	// damage1 file by move xxx.fdb to bfdb before doRestore
+	bfdbPath := filepath.Join(dbConf.StorePath, chainId, blockFilePath)
+	restoringPath := filepath.Join(bfdbPath, tbf.RestoringPath)
+	dSegName := tbf.Uint64ToSegmentName(damagePoint[0])
+	assert.Nil(t, os.Rename(tbf.SegmentPath(dSegName, restoringPath), tbf.SegmentPath(dSegName, bfdbPath)))
+
+	// damage2 file by delete xxx.fdb to bfdb after doRestore, then doRestore this point again
+	dSegName = tbf.Uint64ToSegmentName(damagePoint[1])
+	assert.Nil(t, os.RemoveAll(tbf.SegmentPath(dSegName, restoringPath)))
+
+	// damage3 file by delete xxx.restoring.json after doRestore, then doRestore this point again
+	dSegName = tbf.Uint64ToSegmentName(damagePoint[2])
+	assert.Nil(t, os.RemoveAll(tbf.SegmentIndexPath(dSegName, restoringPath)))
+
+	// restart store instance with previous data
+	s, err = factory.NewStore(chainId, dbConf, &test.GoLogger{}, nil)
+	assert.Nil(t, err)
+
+	// restore damage point block
+	rblk, _, errr := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+		Block:          blocks[damagePoint[1]-1],
+		TxRWSets:       txRWSetMp[blocks[damagePoint[1]-1].Header.BlockHeight],
+		ContractEvents: nil,
+	})
+	assert.Nil(t, errr)
+	assert.Nil(t, s.RestoreBlocks([][]byte{rblk}))
+
+	rblk, _, errr = serialization.SerializeBlock(&storePb.BlockWithRWSet{
+		Block:          blocks[damagePoint[2]-1],
+		TxRWSets:       txRWSetMp[blocks[damagePoint[2]-1].Header.BlockHeight],
+		ContractEvents: nil,
+	})
+	assert.Nil(t, errr)
+	assert.Nil(t, s.RestoreBlocks([][]byte{rblk}))
+
+	time.Sleep(time.Duration(dbConf.RestoreInterval) * time.Second)
+	as, err = s.GetArchiveStatus()
+	assert.Nil(t, err)
+	fileCnt := len(as.FileRanges)
+	for fileCnt != 0 {
+		time.Sleep(waitTime)
+		as, err = s.GetArchiveStatus()
+		assert.Nil(t, err)
+		fileCnt = len(as.FileRanges)
+	}
+	assert.Equal(t, uint64(0), as.ArchivePivot)
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	verifyArchive(t, confBlocks[0], false, blocks, s)
+	_ = s.Close()
+}
+
+func waitArchiveNormal(bs protocol.BlockchainStore) error {
+	var (
+		err error
+		as  *storePb.ArchiveStatus
+	)
+	status := storePb.ArchiveProcess_Archiving
+	for status != storePb.ArchiveProcess_Normal {
+		time.Sleep(20 * time.Millisecond)
+		as, err = bs.GetArchiveStatus()
+		if err != nil {
+			return err
+		}
+		status = as.Process
+	}
+	return nil
+}
+
+func restoreBlockPart(t *testing.T, restoreHeight int, blocks []*commonPb.Block,
+	txRWSetMp map[uint64][]*commonPb.TxRWSet, s protocol.BlockchainStore,
+	waitTime time.Duration, confHeight uint64) {
+
+	as, err := s.GetArchiveStatus()
+	assert.Nil(t, err)
+	//blocksBytes := make([][]byte, 0, int(as.ArchivePivot)-restoreHeight+1)
+	for i := restoreHeight; i <= int(as.ArchivePivot); i++ {
+		blockBytes, _, err5 := serialization.SerializeBlock(&storePb.BlockWithRWSet{
+			Block:          blocks[i],
+			TxRWSets:       txRWSetMp[blocks[i].Header.BlockHeight],
+			ContractEvents: nil,
+		})
+
+		assert.Nil(t, err5)
+		assert.Nil(t, s.RestoreBlocks([][]byte{blockBytes}))
+	}
+
+	//err = s.RestoreBlocks(blocksBytes)
+	//assert.Nil(t, err)
+	as, err = s.GetArchiveStatus()
+	assert.Nil(t, err)
+	//assert.Equal(t, 1, len(as.FileRanges))
+	//time.Sleep(time.Duration(dbConf.RestoreInterval) * time.Second)
+	fileCnt := len(as.FileRanges)
+	for fileCnt != 0 {
+		time.Sleep(waitTime)
+		as, err = s.GetArchiveStatus()
+		assert.Nil(t, err)
+		fileCnt = len(as.FileRanges)
+	}
+	if restoreHeight == 0 {
+		assert.Equal(t, uint64(0), as.ArchivePivot)
+	} else {
+		assert.Equal(t, uint64(restoreHeight-1), as.ArchivePivot)
+	}
+	assert.Equal(t, 0, len(as.FileRanges))
+
+	verifyArchive(t, confHeight, false, blocks, s)
+}
+
+func verifyArchive(t *testing.T, confHeight uint64, verifyHeader bool, blocks []*commonPb.Block, s protocol.BlockchainStore) {
+	archivedPivot := s.GetArchivedPivot()
+
+	if archivedPivot == 0 {
+		verifyUnarchivedHeight(t, archivedPivot, verifyHeader, blocks, s)
+		verifyUnarchivedHeight(t, archivedPivot+1, verifyHeader, blocks, s)
+		return
+	}
+
+	// verify store apis: archived height
+	verifyArchivedHeight(t, archivedPivot-1, verifyHeader, blocks, s)
+
+	// verify store apis: archivedPivot height
+	verifyArchivedHeight(t, archivedPivot, verifyHeader, blocks, s)
+
+	// verify store apis: conf block height
+	verifyUnarchivedHeight(t, confHeight, verifyHeader, blocks, s)
+
+	// verify store apis: unarchived height
+	verifyUnarchivedHeight(t, archivedPivot+1, verifyHeader, blocks, s)
+}
+
+func verifyUnarchivedHeight(t *testing.T, avBlkHeight uint64, verifyHeader bool, blocks []*commonPb.Block, s protocol.BlockchainStore) {
+	avBlk := blocks[avBlkHeight]
+	vbHeight, err1 := s.GetHeightByHash(avBlk.Header.BlockHash)
+	assert.True(t, err1 == nil)
+	assert.Equal(t, vbHeight, avBlkHeight)
+
+	if verifyHeader {
+		header, err2 := s.GetBlockHeaderByHeight(avBlk.Header.BlockHeight)
+		assert.True(t, err2 == nil)
+		assert.True(t, bytes.Equal(header.BlockHash, avBlk.Header.BlockHash))
+	}
+
+	vtHeight, err4 := s.GetTxInfoOnly(avBlk.Txs[0].Payload.TxId)
+	assert.True(t, err4 == nil)
+	assert.Equal(t, vtHeight.BlockHeight, avBlkHeight)
+
+	vtBlk, err5 := s.GetBlockByTx(avBlk.Txs[0].Payload.TxId)
+	assert.True(t, err5 == nil)
+	assert.Equal(t, avBlk.Header.ChainId, vtBlk.Header.ChainId)
+
+	vttx, err6 := s.GetTx(avBlk.Txs[0].Payload.TxId)
+	assert.True(t, err6 == nil)
+	assert.Equal(t, avBlk.Header.ChainId, vttx.Payload.ChainId)
+
+	vtBlk2, err7 := s.GetBlockByHash(avBlk.Hash())
+	assert.True(t, err7 == nil)
+	assert.Equal(t, avBlk.Header.ChainId, vtBlk2.Header.ChainId)
+
+	vtBlkRW, err8 := s.GetBlockWithRWSets(avBlk.Header.BlockHeight)
+	assert.True(t, err8 == nil)
+	assert.Equal(t, avBlk.Header.ChainId, vtBlkRW.Block.Header.ChainId)
+
+	vtBlkRWs, err9 := s.GetTxRWSetsByHeight(avBlk.Header.BlockHeight)
+	assert.True(t, err9 == nil)
+	assert.Equal(t, len(avBlk.Txs), len(vtBlkRWs))
+	if len(avBlk.Txs) > 0 {
+		assert.Equal(t, avBlk.Txs[0].Payload.TxId, vtBlkRWs[0].TxId)
+	}
+}
+
+func verifyArchivedHeight(t *testing.T, avBlkHeight uint64, verifyHeader bool, blocks []*commonPb.Block, s protocol.BlockchainStore) {
+	avBlk := blocks[avBlkHeight]
+	vbHeight, err1 := s.GetHeightByHash(avBlk.Header.BlockHash)
+	assert.True(t, err1 == nil)
+	assert.Equal(t, vbHeight, avBlkHeight)
+
+	if verifyHeader {
+		header, err2 := s.GetBlockHeaderByHeight(avBlk.Header.BlockHeight)
+		assert.True(t, err2 == nil)
+		assert.True(t, bytes.Equal(header.BlockHash, avBlk.Header.BlockHash))
+	}
+
+	vtHeight, err4 := s.GetTxHeight(avBlk.Txs[0].Payload.TxId)
+	assert.True(t, err4 == nil)
+	assert.Equal(t, vtHeight, avBlkHeight)
+
+	vtBlk, err5 := s.GetBlockByTx(avBlk.Txs[0].Payload.TxId)
+	assert.True(t, tbf.ErrArchivedBlock == err5)
+	assert.True(t, vtBlk == nil)
+
+	vttx, err6 := s.GetTx(avBlk.Txs[0].Payload.TxId)
+	assert.True(t, tbf.ErrArchivedTx == err6)
+	assert.True(t, vttx == nil)
+
+	vtBlk2, err7 := s.GetBlockByHash(avBlk.Hash())
+	assert.True(t, tbf.ErrArchivedBlock == err7)
+	assert.True(t, vtBlk2 == nil)
+
+	vtBlkRW, err8 := s.GetBlockWithRWSets(avBlk.Header.BlockHeight)
+	assert.True(t, tbf.ErrArchivedBlock == err8)
+	assert.True(t, vtBlkRW == nil)
+
+	vtBlkRWs, err9 := s.GetTxRWSetsByHeight(avBlk.Header.BlockHeight)
+	assert.True(t, tbf.ErrArchivedRWSet == err9)
+	assert.True(t, vtBlkRWs == nil)
+}
+
+func TestBlockStoreImpl_GetArchivedPivot(t *testing.T) {
+	var factory = getFactory()
+	ldbConfig := getlvldbConfig("")
+	ldbConfig.DisableBlockFileDb = false
+	s, err := factory.NewStore(chainId, ldbConfig, &test.GoLogger{}, nil)
+	//defer s.Close()
+	assert.Equal(t, nil, err)
+	bs, ok := s.(*BlockStoreImpl)
+
+	assert.Equal(t, true, ok)
+	init5Blocks(s)
+
+	height := bs.GetArchivedPivot()
+	assert.Equal(t, uint64(0), height)
+
+	sqldbConfig := getSqliteConfig()
+	s, err = factory.NewStore(chainId, sqldbConfig, &test.GoLogger{}, nil)
+	assert.Equal(t, nil, err)
+	bs, ok = s.(*BlockStoreImpl)
+	assert.Equal(t, true, ok)
+	init5Blocks(s)
+	height = bs.GetArchivedPivot()
+	assert.Equal(t, uint64(0), height)
+}
+
+// filterFileNames 扫描区块高度区间范围内所有的区块文件列表
+// @Description:
+// @param begin
+// @param end
+// @param path
+// @return []*storePb.FileRange
+// @return error
+func TTest_filterFileNames(t *testing.T) {
+
+	//heights, err := scanPath(path)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	heights := []uint64{
+		uint64(1),
+		uint64(4016),
+	}
+
+	begin := uint64(0)
+	end := uint64(4014)
+
+	rngs := bfdbFileRngs(heights)
+
+	if len(rngs) == 0 {
+		return
+	}
+
+	var (
+		si, ei int
+	)
+	for i, rng := range rngs {
+		if begin == rng.Start {
+			si = i
+		}
+		if end == rng.End || rng.End == 0 {
+			ei = i
+			break
+		}
+	}
+
+	for _, fr := range rngs[si : ei+1] {
+		fmt.Printf("fn: %s, start: %d, end: %d \n", fr.FileName, fr.Start, fr.End)
+	}
+}
+
+// bfdbFileRngs calculate xxx.fdb contains block range, and last range.End = 0
+// @Description:
+// @param heights
+// @return []*storePb.FileRange
+func bfdbFileRngs(heights []uint64) []*storePb.FileRange {
+	frs := make([]*storePb.FileRange, 0, len(heights)+1)
+	if len(heights) == 0 {
+		return frs
+	}
+	if len(heights) == 1 {
+		frs = append(frs, &storePb.FileRange{
+			FileName: tbf.Uint64ToSegmentName(heights[0]),
+			Start:    heights[0] - 1,
+			End:      0,
+		})
+		return frs
+	}
+
+	for i := 0; i < len(heights)-1; i++ {
+		frs = append(frs, &storePb.FileRange{
+			FileName: tbf.Uint64ToSegmentName(heights[i]),
+			Start:    heights[i] - 1,
+			End:      heights[i+1] - 2,
+		})
+	}
+
+	lastI := len(heights) - 1
+	frs = append(frs, &storePb.FileRange{
+		FileName: tbf.Uint64ToSegmentName(heights[lastI]),
+		Start:    heights[lastI] - 1,
+		End:      0,
+	})
+
+	return frs
+}

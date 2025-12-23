@@ -1,0 +1,38 @@
+pwk_config:
+  - domain: techtradechain.com
+    host_name: wx-org
+    count: 4                # 如果为1，直接使用host_name，否则添加递增编号
+#    pk_algo: RSA2048
+    pk_algo: ecc_p256
+#    pk_algo: sm2
+    hash_algo: sha256
+#    hash_algo: sm3
+    #pkcs11配置
+    pkcs11:
+      enabled: false
+      library: /usr/local/lib64/pkcs11/libupkcs11.so
+      label: HSM
+      password: 11111111
+      session_cache_size: 10
+      hash: "SHA256" # hash algorithm used to compute SKI
+
+    # Admin配置
+    admin:
+    # 节点证书配置
+    node:
+      - type: consensus
+        # 共识节点数量
+        count: 1
+      - type: common
+        # 普通节点数量
+        count: 1
+    user:
+      - type: admin
+        # 管理员证书数量
+        count: 1
+      - type: client
+        # 普通用户证书数量
+        count: 1
+      - type: light
+        # 轻节点用户证书数量
+        count: 1

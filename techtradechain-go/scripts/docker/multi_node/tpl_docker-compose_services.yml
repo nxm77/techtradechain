@@ -1,0 +1,15 @@
+  node{id}:
+    container_name: cm-node{id}
+    hostname: cm-node{id}
+    image: "{image}"
+    restart: always
+    working_dir: "/techtradechain-go/bin"
+    command: "./techtradechain start -c ../config/wx-org{id}.techtradechain.com/techtradechain.yml"
+    ports:
+      - "{rpc_port}:{rpc_port}"
+      - "{p2p_port}:{p2p_port}"
+    volumes:
+      - {config_dir}:/techtradechain-go/config/wx-org{id}.techtradechain.com
+      - ./data/data{id}:/techtradechain-go/data
+      - ./log/log{id}:/techtradechain-go/log
+

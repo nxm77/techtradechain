@@ -1,0 +1,86 @@
+version: '3'
+
+services:
+  node1:
+    container_name: cm-node1
+    hostname: cm-node1
+    image: "techtradechainofficial/techtradechain:v2.0.0"
+    restart: always
+    working_dir: "/techtradechain-go/bin"
+    command: "./techtradechain start -c ../config/wx-org1.techtradechain.com/techtradechain.yml > panic.log"
+    ports:
+      - "11301:11301"
+      - "12301:12301"
+    volumes:
+      - ../config/four-nodes/wx-org1.techtradechain.com:/techtradechain-go/config/wx-org1.techtradechain.com
+      - ./tmp/data1:/techtradechain-go/data
+      - ./tmp/log1:/techtradechain-go/log
+    networks:
+      techtradechainofficial-localnet:
+        aliases:      
+          - cm-node1
+        ipv4_address: 172.49.1.11
+  node2:
+    container_name: cm-node2
+    hostname: cm-node2
+    image: "techtradechainofficial/techtradechain:v2.0.0"
+    restart: always
+    working_dir: "/techtradechain-go/bin"
+    command: "./techtradechain start -c ../config/wx-org2.techtradechain.com/techtradechain.yml > panic.log"
+    ports:
+      - "11302:11302"
+      - "12302:12302"
+    volumes:
+      - ../config/four-nodes/wx-org2.techtradechain.com:/techtradechain-go/config/wx-org2.techtradechain.com
+      - ./tmp/data2:/techtradechain-go/data
+      - ./tmp/log2:/techtradechain-go/log
+    networks:
+      techtradechainofficial-localnet:
+        aliases:      
+          - cm-node2
+        ipv4_address: 172.49.1.12
+  node3:
+    container_name: cm-node3
+    hostname: cm-node3
+    image: "techtradechainofficial/techtradechain:v2.0.0"
+    restart: always
+    working_dir: "/techtradechain-go/bin"
+    command: "./techtradechain start -c ../config/wx-org3.techtradechain.com/techtradechain.yml > panic.log"
+    ports:
+      - "11303:11303"
+      - "12303:12303"
+    volumes:
+      - ../config/four-nodes/wx-org3.techtradechain.com:/techtradechain-go/config/wx-org3.techtradechain.com
+      - ./tmp/data3:/techtradechain-go/data
+      - ./tmp/log3:/techtradechain-go/log
+    networks:
+      techtradechainofficial-localnet:
+        aliases:      
+          - cm-node3
+        ipv4_address: 172.49.1.13
+  node4:
+    container_name: cm-node4
+    hostname: cm-node4
+    image: "techtradechainofficial/techtradechain:v2.0.0"
+    restart: always
+    working_dir: "/techtradechain-go/bin"
+    command: "./techtradechain start -c ../config/wx-org4.techtradechain.com/techtradechain.yml > panic.log"
+    ports:
+      - "11304:11304"
+      - "12304:12304"
+    volumes:
+      - ../config/four-nodes/wx-org4.techtradechain.com:/techtradechain-go/config/wx-org4.techtradechain.com
+      - ./tmp/data4:/techtradechain-go/data
+      - ./tmp/log4:/techtradechain-go/log
+    networks:
+      techtradechainofficial-localnet:
+        aliases:      
+          - cm-node4
+        ipv4_address: 172.49.1.14
+
+networks:
+  techtradechainofficial-localnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.49.1.0/16
